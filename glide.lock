@@ -1,0 +1,12 @@
+hash: aa47888081eac167b5ea632df07b1f9489685a2f4ad0d19d365340ead4363d6a
+updated: 2017-01-26T11:44:57.406864019-05:00
+imports:
+- name: github.com/bitly/go-simplejson
+  version: aabad6e819789e569bd6aabf444c935aa9ba1e44
+- name: github.com/justincampbell/anybar
+  version: eb818cda69b429f128bc76d2eec524f2affd9449
+- name: github.com/namsral/flag
+  version: e6432831f90663e9fb69ca75eca1c86f8f37f729
+  repo: https://github.com/namsral/flag
+  vcs: git
+testImports: []

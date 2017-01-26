@@ -1,0 +1,9 @@
+package: github.com/outten45/cli-tools
+import:
+- package: github.com/namsral/flag
+  repo: https://github.com/namsral/flag
+  vcs: git
+- package: github.com/bitly/go-simplejson
+  version: ^0.5.0
+- package: github.com/justincampbell/anybar
+  version: ^0.1.0
