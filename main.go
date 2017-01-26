@@ -56,7 +56,6 @@ func parseArgs(args []string) *argsContext {
 func checkTodos(ac *argsContext) {
 
 	url := ac.todoURL()
-	fmt.Printf("URL: %s\n", url)
 
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
@@ -81,10 +80,14 @@ func checkTodos(ac *argsContext) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%+v\n", len(vals))
+
 	if len(vals) > 0 {
+		t := time.Now()
+		fmt.Printf("%s - Todo count found: %d\n", t.Format("2006-01-02 15:04:05"), len(vals))
 		anybar.Red()
 	} else {
+		t := time.Now()
+		fmt.Printf("%s - Nothing found.\n", t.Format("2006-01-02 15:04:05"))
 		anybar.White()
 	}
 }
