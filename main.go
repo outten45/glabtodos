@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"time"
@@ -41,7 +42,7 @@ func parseArgs(args []string) *argsContext {
 		Host:    fs.String("host", "", "name of the gitlab host"),
 		APIPath: fs.String("apipath", "", "api path on the gitlab host"),
 		Token:   fs.String("token", "", "token for gitlab"),
-		Delay:   fs.String("delay", "60s", "Delay between polling gitlab. default: 60s"),
+		Delay:   fs.String("delay", "90s", "Delay between polling gitlab. default: 90s"),
 	}
 	fs.Parse(args)
 	if !ap.valid() {
@@ -53,7 +54,7 @@ func parseArgs(args []string) *argsContext {
 	return ap
 }
 
-func checkTodos(ac *argsContext) {
+func checkTodos(ac *argsContext) error {
 
 	url := ac.todoURL()
 
@@ -63,22 +64,26 @@ func checkTodos(ac *argsContext) {
 
 	response, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return err
 	}
 
 	defer response.Body.Close()
 	buf, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return err
 	}
 
 	j, err := simplejson.NewJson(buf)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return err
 	}
 	vals, err := j.Array()
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return err
 	}
 
 	if len(vals) > 0 {
@@ -90,16 +95,29 @@ func checkTodos(ac *argsContext) {
 		fmt.Printf("%s - Nothing found.\n", t.Format("2006-01-02 15:04:05"))
 		anybar.White()
 	}
+
+	return nil
 }
 
 func main() {
 	ac := parseArgs(os.Args)
 
 	fmt.Printf("%+v\n", ac)
+	var err error
+	var errorCount int64
 
 	for {
-		checkTodos(ac)
+		err = checkTodos(ac)
 		t, _ := time.ParseDuration(*ac.Delay)
+		if err != nil {
+			errorCount = errorCount + 1
+			backoff := math.Exp2(float64(errorCount)) - 1
+			fmt.Printf(">> There was a problem. Waiting an additional %0.1f minutes for next request.\n", backoff)
+			t = time.Duration(backoff) * time.Minute
+		} else {
+			errorCount = 0
+		}
+
 		time.Sleep(t)
 	}
 
