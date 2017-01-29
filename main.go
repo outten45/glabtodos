@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/0xAX/notificator"
 	simplejson "github.com/bitly/go-simplejson"
 	"github.com/justincampbell/anybar"
 	"github.com/namsral/flag"
@@ -21,6 +22,8 @@ type argsContext struct {
 	APIPath *string
 	Delay   *string
 }
+
+var notify *notificator.Notificator
 
 func (ac *argsContext) todoURL() string {
 	return fmt.Sprintf("%s%stodos", *ac.Host, *ac.APIPath)
@@ -54,6 +57,25 @@ func parseArgs(args []string) *argsContext {
 	return ap
 }
 
+func sendNotifications(todos []interface{}) {
+	if len(todos) > 0 {
+		t := time.Now()
+		fmt.Printf("%s - TODO count found: %d\n", t.Format("2006-01-02 15:04:05"), len(todos))
+		anybar.Red()
+
+		txt := fmt.Sprintf("%d pending TODOs.", len(todos))
+		err := notify.Push(txt, "", "", notificator.UR_CRITICAL)
+		if err != nil {
+			log.Print("Nofificator error: ")
+			log.Println(err)
+		}
+	} else {
+		t := time.Now()
+		fmt.Printf("%s - Nothing found.\n", t.Format("2006-01-02 15:04:05"))
+		anybar.White()
+	}
+}
+
 func checkTodos(ac *argsContext) error {
 
 	url := ac.todoURL()
@@ -80,27 +102,21 @@ func checkTodos(ac *argsContext) error {
 		log.Println(err)
 		return err
 	}
+	//fmt.Printf("%+v\n", j)
 	vals, err := j.Array()
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
-	if len(vals) > 0 {
-		t := time.Now()
-		fmt.Printf("%s - Todo count found: %d\n", t.Format("2006-01-02 15:04:05"), len(vals))
-		anybar.Red()
-	} else {
-		t := time.Now()
-		fmt.Printf("%s - Nothing found.\n", t.Format("2006-01-02 15:04:05"))
-		anybar.White()
-	}
-
+	sendNotifications(vals)
 	return nil
 }
 
 func main() {
 	ac := parseArgs(os.Args)
+	anybar.White()
+	notify = notificator.New(notificator.Options{AppName: "Gitlab"})
 
 	fmt.Printf("%+v\n", ac)
 	var err error
@@ -109,10 +125,11 @@ func main() {
 	for {
 		err = checkTodos(ac)
 		t, _ := time.ParseDuration(*ac.Delay)
+
 		if err != nil {
 			errorCount = errorCount + 1
 			backoff := math.Exp2(float64(errorCount)) - 1
-			fmt.Printf(">> There was a problem. Waiting an additional %0.1f minutes for next request.\n", backoff)
+			fmt.Printf(">> There was a problem. Waiting %0.1f min to retry request.\n", backoff)
 			t = time.Duration(backoff) * time.Minute
 		} else {
 			errorCount = 0

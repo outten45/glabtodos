@@ -7,3 +7,4 @@ import:
   version: ^0.5.0
 - package: github.com/justincampbell/anybar
   version: ^0.1.0
+- package: github.com/0xAX/notificator
