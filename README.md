@@ -17,5 +17,10 @@ Add the following environmental variables:
 * `GLAB_TOKEN` - Your access token setup in GLAB_LAB
 * `GLAB_DELAY` - The display between polling and defaults to 90s (90 seconds)
 
+To install via the go command:
+
+```
+go get -u github.com/outten45/glabtodos/
+```
 
 
