@@ -48,7 +48,7 @@ func parseArgs(args []string) *argsContext {
 		APIPath: fs.String("apipath", "", "api path on the gitlab host"),
 		Token:   fs.String("token", "", "token for gitlab"),
 		Delay:   fs.String("delay", "90s", "Delay between polling gitlab. default: 90s"),
-		Notify:   fs.String("notify", "", "External script to call for notifications"),
+		Notify:  fs.String("notify", "", "External script to call for notifications"),
 	}
 	fs.Parse(args)
 	if !ap.valid() {
@@ -72,16 +72,16 @@ func sendNotifications(todos []interface{}, ext_command string) {
 			log.Println(err)
 		}
 		if ext_command != "" {
-      cmd := exec.Command(ext_command, txt)
-      err2 :=cmd.Start()
-      if err2 != nil {
-        log.Fatal(err2)
-      }
-      err2 = cmd.Wait()
-      if err2 != nil {
-        log.Printf("External command finished with error: %v", err2)
-      }
-    }
+			cmd := exec.Command(ext_command, txt)
+			err2 := cmd.Start()
+			if err2 != nil {
+				log.Fatal(err2)
+			}
+			err2 = cmd.Wait()
+			if err2 != nil {
+				log.Printf("External command finished with error: %v", err2)
+			}
+		}
 	} else {
 		t := time.Now()
 		fmt.Printf("%s - Nothing found.\n", t.Format("2006-01-02 15:04:05"))
@@ -121,7 +121,7 @@ func checkTodos(ac *argsContext) error {
 		log.Println(err)
 		return err
 	}
-  sendNotifications(vals, *ac.Notify)
+	sendNotifications(vals, *ac.Notify)
 	return nil
 }
 
