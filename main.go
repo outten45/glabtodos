@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/0xAX/notificator"
@@ -21,6 +22,7 @@ type argsContext struct {
 	Token   *string
 	APIPath *string
 	Delay   *string
+	Notify  *string
 }
 
 var notify *notificator.Notificator
@@ -46,6 +48,7 @@ func parseArgs(args []string) *argsContext {
 		APIPath: fs.String("apipath", "", "api path on the gitlab host"),
 		Token:   fs.String("token", "", "token for gitlab"),
 		Delay:   fs.String("delay", "90s", "Delay between polling gitlab. default: 90s"),
+		Notify:  fs.String("notify", "", "External script to call for notifications"),
 	}
 	fs.Parse(args)
 	if !ap.valid() {
@@ -57,17 +60,27 @@ func parseArgs(args []string) *argsContext {
 	return ap
 }
 
-func sendNotifications(todos []interface{}) {
+func sendNotifications(todos []interface{}, ext_command string) {
 	if len(todos) > 0 {
 		t := time.Now()
 		fmt.Printf("%s - TODO count found: %d\n", t.Format("2006-01-02 15:04:05"), len(todos))
 		anybar.Red()
-
 		txt := fmt.Sprintf("%d pending TODOs.", len(todos))
 		err := notify.Push(txt, "", "", notificator.UR_CRITICAL)
 		if err != nil {
 			log.Print("Nofificator error: ")
 			log.Println(err)
+		}
+		if ext_command != "" {
+			cmd := exec.Command(ext_command, txt)
+			err2 := cmd.Start()
+			if err2 != nil {
+				log.Fatal(err2)
+			}
+			err2 = cmd.Wait()
+			if err2 != nil {
+				log.Printf("External command finished with error: %v", err2)
+			}
 		}
 	} else {
 		t := time.Now()
@@ -108,8 +121,7 @@ func checkTodos(ac *argsContext) error {
 		log.Println(err)
 		return err
 	}
-
-	sendNotifications(vals)
+	sendNotifications(vals, *ac.Notify)
 	return nil
 }
 
