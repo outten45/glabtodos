@@ -23,6 +23,7 @@ type argsContext struct {
 	APIPath *string
 	Delay   *string
 	Notify  *string
+	Icon    *string
 }
 
 var notify *notificator.Notificator
@@ -49,6 +50,7 @@ func parseArgs(args []string) *argsContext {
 		Token:   fs.String("token", "", "token for gitlab"),
 		Delay:   fs.String("delay", "90s", "Delay between polling gitlab. default: 90s"),
 		Notify:  fs.String("notify", "", "External script to call for notifications"),
+		Icon:    fs.String("icon", "", "Location of icon (optional)"),
 	}
 	fs.Parse(args)
 	if !ap.valid() {
@@ -66,7 +68,7 @@ func sendNotifications(todos []interface{}, ext_command string) {
 		fmt.Printf("%s - TODO count found: %d\n", t.Format("2006-01-02 15:04:05"), len(todos))
 		anybar.Red()
 		txt := fmt.Sprintf("%d pending TODOs.", len(todos))
-		err := notify.Push(txt, "", "", notificator.UR_CRITICAL)
+		err := notify.Push("GitLab Todo", txt, "", notificator.UR_NORMAL)
 		if err != nil {
 			log.Print("Nofificator error: ")
 			log.Println(err)
@@ -128,9 +130,13 @@ func checkTodos(ac *argsContext) error {
 func main() {
 	ac := parseArgs(os.Args)
 	anybar.White()
-	notify = notificator.New(notificator.Options{AppName: "Gitlab"})
+	icon := ""
+	if ac.Icon != nil && len(*ac.Icon) > 0 {
+		icon = *ac.Icon
+	}
+	notify = notificator.New(notificator.Options{AppName: "GitLab", DefaultIcon: icon})
 
-	fmt.Printf("%+v\n", ac)
+	// fmt.Printf("%+v\n", ac)
 	var err error
 	var errorCount int64
 
