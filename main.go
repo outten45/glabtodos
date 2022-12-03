@@ -52,7 +52,9 @@ func parseArgs(args []string) *argsContext {
 		Notify:  fs.String("notify", "", "External script to call for notifications"),
 		Icon:    fs.String("icon", "", "Location of icon (optional)"),
 	}
+	// fmt.Printf("1ap: %+v|%+v\n", *ap.Delay, *ap.Host)
 	fs.Parse(args)
+	// fmt.Printf("2ap: %+v|%+v\n", *ap.Delay, *ap.Host)
 	if !ap.valid() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 		fs.PrintDefaults()
@@ -142,7 +144,11 @@ func main() {
 
 	for {
 		err = checkTodos(ac)
-		t, _ := time.ParseDuration(*ac.Delay)
+		t, err2 := time.ParseDuration(*ac.Delay)
+		// log.Printf("time: %+t\n", t)
+		if err2 != nil {
+			log.Fatalf("Error: %+v\n", err2)
+		}
 
 		if err != nil {
 			errorCount = errorCount + 1
