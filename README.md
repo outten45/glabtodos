@@ -1,34 +1,52 @@
 # glabtodos
 
-A command line tool to notify you have pending todos from a gitlab instance on
-your Mac. There are 2 types of notifications.
+A command-line tool that periodically checks a GitLab instance for pending
+TODOs and displays a desktop notification when any are found.
 
-- If you run [AnyBar](https://github.com/tonsky/AnyBar), it will turn the dot
-  Red when you have pending todos.
-- Using [notificator](https://github.com/0xAX/notificator) you will get a popup
-  notification if you have any pending todos.
+Notifications are provided by [beeep](https://github.com/gen2brain/beeep), a
+cross-platform Go library that supports Linux, macOS, and Windows.
 
-# Setup
+## Setup
 
-Add the following environmental variables:
+Set the following environment variables, or provide the equivalent command-line
+flags:
 
-- `GLAB_HOST` - The schema and host (for example https://gitlab.example.com)
-- `GLAB_APIPATH` - The URI of the API (for example /api/v3/)
-- `GLAB_TOKEN` - Your access token setup in GLAB_LAB
-- `GLAB_DELAY` - The display between polling and defaults to 90s (90 seconds)
+- `GLAB_HOST` - The scheme and host (for example, `https://gitlab.example.com`)
+- `GLAB_APIPATH` - The GitLab API path (for example, `/api/v3/`)
+- `GLAB_TOKEN` - Your GitLab access token
+- `GLAB_DELAY` - The interval between polling requests; defaults to `90s`
 
-To install via the go command:
+Optional settings:
 
-```
-go get -u github.com/outten45/glabtodos/
-```
+- `GLAB_ICON` - Path to an icon used for desktop notifications
+- `GLAB_NOTIFY` - External command to run when pending TODOs are found
 
-To build:
+## Install
 
-```shell
-go build -o glabtodos main.go
+```sh
+go install github.com/outten45/glabtodos@latest
 ```
 
-# Development
+## Build
 
-For local development, it is recommended to use [Devbox](https://www.jetify.com/devbox).
+Build binaries for Linux, macOS, and Windows with:
+
+```sh
+make
+```
+
+The binaries are placed in `dist/`:
+
+- `dist/glabtodos-linux-amd64`
+- `dist/glabtodos-darwin-amd64`
+- `dist/glabtodos-windows-amd64.exe`
+
+To run directly on the current system:
+
+```sh
+make run
+```
+
+## Development
+
+For local development, [Devbox](https://www.jetify.com/devbox) is recommended.
