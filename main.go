@@ -141,14 +141,14 @@ func main() {
 	// fmt.Printf("%+v\n", ac)
 	var err error
 	var errorCount int64
+	t, err2 := time.ParseDuration(*ac.Delay)
+	// log.Printf("time: %+t\n", t)
+	if err2 != nil {
+		log.Fatalf("Error: %+v\n", err2)
+	}
 
 	for {
 		err = checkTodos(ac)
-		t, err2 := time.ParseDuration(*ac.Delay)
-		// log.Printf("time: %+t\n", t)
-		if err2 != nil {
-			log.Fatalf("Error: %+v\n", err2)
-		}
 
 		if err != nil {
 			errorCount = errorCount + 1

@@ -23,4 +23,9 @@ To install via the go command:
 go get -u github.com/outten45/glabtodos/
 ```
 
+To build:
+
+``` shell
+go build -o glabtodos main.go
+```
 
