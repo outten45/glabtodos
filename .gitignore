@@ -1,3 +1,4 @@
 cmd/jresults/jresults
 /.direnv/
 /glabtodos
+/dist

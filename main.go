@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/0xAX/notificator"
+	"github.com/gen2brain/beeep"
 	simplejson "github.com/bitly/go-simplejson"
 	"github.com/justincampbell/anybar"
 	"github.com/namsral/flag"
@@ -25,8 +25,6 @@ type argsContext struct {
 	Notify  *string
 	Icon    *string
 }
-
-var notify *notificator.Notificator
 
 func (ac *argsContext) todoURL() string {
 	return fmt.Sprintf("%s%stodos", *ac.Host, *ac.APIPath)
@@ -70,9 +68,9 @@ func sendNotifications(todos []interface{}, ext_command string) {
 		fmt.Printf("%s - TODO count found: %d\n", t.Format("2006-01-02 15:04:05"), len(todos))
 		anybar.Red()
 		txt := fmt.Sprintf("%d pending TODOs.", len(todos))
-		err := notify.Push("GitLab Todo", txt, "", notificator.UR_NORMAL)
+		err := beeep.Alert("GitLab Todo", txt, notificationIcon)
 		if err != nil {
-			log.Print("Nofificator error: ")
+			log.Print("Beeep notification error: ")
 			log.Println(err)
 		}
 		if ext_command != "" {
@@ -129,14 +127,15 @@ func checkTodos(ac *argsContext) error {
 	return nil
 }
 
+var notificationIcon string
+
 func main() {
 	ac := parseArgs(os.Args)
 	anybar.White()
-	icon := ""
-	if ac.Icon != nil && len(*ac.Icon) > 0 {
-		icon = *ac.Icon
+	if ac.Icon != nil {
+		notificationIcon = *ac.Icon
 	}
-	notify = notificator.New(notificator.Options{AppName: "GitLab", DefaultIcon: icon})
+	beeep.AppName = "GitLab"
 
 	// fmt.Printf("%+v\n", ac)
 	var err error
