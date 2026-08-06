@@ -7,6 +7,7 @@ require (
 	github.com/gen2brain/beeep v0.11.2
 	github.com/justincampbell/anybar v0.1.0
 	github.com/namsral/flag v0.0.0-20160824132254-e6432831f906
+	github.com/pelletier/go-toml/v2 v2.2.3
 )
 
 require (
