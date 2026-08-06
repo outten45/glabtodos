@@ -10,16 +10,20 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/gen2brain/beeep"
 	simplejson "github.com/bitly/go-simplejson"
+	"github.com/gen2brain/beeep"
 	"github.com/justincampbell/anybar"
 	"github.com/namsral/flag"
+
+	"github.com/outtenr/glabtodos/secrets"
 )
 
 type argsContext struct {
 	Args    []string
 	Host    *string
 	Token   *string
+	OPPath  *string
+	OPCmd   *string
 	APIPath *string
 	Delay   *string
 	Notify  *string
@@ -32,7 +36,7 @@ func (ac *argsContext) todoURL() string {
 
 func (ac *argsContext) valid() bool {
 	valid := true
-	if *ac.Host == "" || *ac.Token == "" || *ac.APIPath == "" {
+	if *ac.Host == "" || *ac.APIPath == "" || (*ac.Token == "" && *ac.OPPath == "") {
 		valid = false
 	}
 	return valid
@@ -46,6 +50,8 @@ func parseArgs(args []string) *argsContext {
 		Host:    fs.String("host", "", "name of the gitlab host"),
 		APIPath: fs.String("apipath", "", "api path on the gitlab host"),
 		Token:   fs.String("token", "", "token for gitlab"),
+		OPPath:  fs.String("op-path", "", "1Password secret reference for the GitLab token (for example, op://Personal/GitLab/API Token)"),
+		OPCmd:   fs.String("op-command", "op.exe", "1Password CLI command"),
 		Delay:   fs.String("delay", "90s", "Delay between polling gitlab. default: 90s"),
 		Notify:  fs.String("notify", "", "External script to call for notifications"),
 		Icon:    fs.String("icon", "", "Location of icon (optional)"),
@@ -60,6 +66,23 @@ func parseArgs(args []string) *argsContext {
 	}
 
 	return ap
+}
+
+// tokenFromArgs returns the configured token. When an 1Password path is set,
+// it keeps retrying until the 1Password CLI is available and authenticated.
+func tokenFromArgs(ac *argsContext) string {
+	if *ac.OPPath == "" {
+		return *ac.Token
+	}
+
+	for {
+		token, err := secrets.GitLabToken(*ac.OPCmd, *ac.OPPath)
+		if err == nil {
+			return token
+		}
+		log.Printf("Unable to read GitLab token from 1Password: %v; retrying in 5s", err)
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func sendNotifications(todos []interface{}, ext_command string) {
@@ -136,6 +159,10 @@ func main() {
 		notificationIcon = *ac.Icon
 	}
 	beeep.AppName = "GitLab"
+
+	// Resolve the token once at startup. This also lets the application start
+	// before 1Password has finished launching or signing in.
+	*ac.Token = tokenFromArgs(ac)
 
 	// fmt.Printf("%+v\n", ac)
 	var err error
