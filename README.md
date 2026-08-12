@@ -8,6 +8,32 @@ cross-platform Go library that supports Linux, macOS, and Windows.
 
 ## Setup
 
+The application automatically loads this file when it exists:
+
+- Linux: `~/.config/glabtodos/config.toml`
+- macOS: `~/Library/Application Support/glabtodos/config.toml`
+- Windows: `%APPDATA%\\glabtodos\\config.toml`
+
+A different file can be selected with `--config PATH`; `--no-config` disables
+configuration-file loading. An explicitly supplied file must exist.
+
+Example `config.toml`:
+
+```toml
+host = "https://gitlab.example.com"
+api_path = "/api/v3/"
+op_path = "op://Personal/GitLab/API Token"
+op_command = "op.exe"
+delay = "90s"
+```
+
+Tokens are intentionally not read from the TOML file. Use `op_path`,
+`GLAB_TOKEN`, or `--token` instead. Configuration precedence is:
+
+```text
+defaults < TOML file < environment variables < command-line flags
+```
+
 Set the following environment variables, or provide the equivalent command-line
 flags:
 

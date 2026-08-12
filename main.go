@@ -28,6 +28,7 @@ type argsContext struct {
 	Delay   *string
 	Notify  *string
 	Icon    *string
+	Config  *string
 }
 
 func (ac *argsContext) todoURL() string {
@@ -43,20 +44,28 @@ func (ac *argsContext) valid() bool {
 }
 
 func parseArgs(args []string) *argsContext {
+	file, configPath, err := loadFileConfig(args)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if file.OPCommand == "" {
+		file.OPCommand = "op.exe"
+	}
 	fs := flag.NewFlagSetWithEnvPrefix(args[0], "GLAB", flag.ExitOnError)
 
 	ap := &argsContext{
 		Args:    args,
-		Host:    fs.String("host", "", "name of the gitlab host"),
-		APIPath: fs.String("apipath", "", "api path on the gitlab host"),
-		Token:   fs.String("token", "", "token for gitlab"),
-		OPPath:  fs.String("op-path", "", "1Password secret reference for the GitLab token (for example, op://Personal/GitLab/API Token)"),
-		OPCmd:   fs.String("op-command", "op.exe", "1Password CLI command"),
-		Delay:   fs.String("delay", "90s", "Delay between polling gitlab. default: 90s"),
-		Notify:  fs.String("notify", "", "External script to call for notifications"),
-		Icon:    fs.String("icon", "", "Location of icon (optional)"),
+		Host:    fs.String("host", file.Host, "name of the gitlab host"),
+		APIPath: fs.String("apipath", file.APIPath, "api path on the gitlab host"),
+		Token:   fs.String("token", "", "token for gitlab (not read from the config file)"),
+		OPPath:  fs.String("op-path", file.OPPath, "1Password secret reference for the GitLab token (for example, op://Personal/GitLab/API Token)"),
+		OPCmd:   fs.String("op-command", file.OPCommand, "1Password CLI command"),
+		Delay:   fs.String("delay", defaultString(file.Delay, "90s"), "Delay between polling gitlab. default: 90s"),
+		Notify:  fs.String("notify", file.Notify, "External script to call for notifications"),
+		Icon:    fs.String("icon", file.Icon, "Location of icon (optional)"),
+		Config:  fs.String("config", configPath, "Path to TOML configuration file"),
 	}
-	// fmt.Printf("1ap: %+v|%+v\n", *ap.Delay, *ap.Host)
+	fs.Bool("no-config", false, "Disable configuration file loading")
 	fs.Parse(args)
 	// fmt.Printf("2ap: %+v|%+v\n", *ap.Delay, *ap.Host)
 	if !ap.valid() {
@@ -66,6 +75,13 @@ func parseArgs(args []string) *argsContext {
 	}
 
 	return ap
+}
+
+func defaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 // tokenFromArgs returns the configured token. When an 1Password path is set,
@@ -158,7 +174,7 @@ func main() {
 	if ac.Icon != nil {
 		notificationIcon = *ac.Icon
 	}
-	beeep.AppName = "GitLab"
+	beeep.AppName = "GLabTodos"
 
 	// Resolve the token once at startup. This also lets the application start
 	// before 1Password has finished launching or signing in.
