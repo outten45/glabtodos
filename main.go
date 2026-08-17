@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -145,10 +145,9 @@ func checkTodos(ac *argsContext) error {
 	}
 
 	defer response.Body.Close()
-	buf, err := ioutil.ReadAll(response.Body)
+	buf, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Println(err)
-		return err
+		return fmt.Errorf("read GitLab response: %w", err)
 	}
 
 	j, err := simplejson.NewJson(buf)
