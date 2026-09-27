@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -39,7 +40,7 @@ func TestLoadFileConfigNoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg != (fileConfig{}) {
+	if !reflect.DeepEqual(cfg, fileConfig{}) {
 		t.Fatalf("expected empty config, got %+v", cfg)
 	}
 }

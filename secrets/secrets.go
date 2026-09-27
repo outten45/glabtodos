@@ -2,9 +2,11 @@
 package secrets
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // GitLabToken reads a GitLab token from 1Password using the 1Password CLI.
@@ -15,7 +17,9 @@ func GitLabToken(opCommand, path string) (string, error) {
 		return "", fmt.Errorf("1Password secret path is empty")
 	}
 
-	out, err := exec.Command(opCommand, "read", path).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, opCommand, "read", path).Output()
 	if err != nil {
 		return "", err
 	}

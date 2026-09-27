@@ -1,7 +1,7 @@
 # glabtodos
 
-A command-line tool that periodically checks a GitLab instance for pending
-TODOs and displays a desktop notification when any are found.
+A command-line tool that periodically checks one or more GitLab instances for pending
+TODOs and displays a desktop notification with their combined count.
 
 Notifications are provided by [beeep](https://github.com/gen2brain/beeep), a
 cross-platform Go library that supports Linux, macOS, and Windows.
@@ -27,8 +27,40 @@ op_command = "op.exe"
 delay = "90s"
 ```
 
-Tokens are intentionally not read from the TOML file. Use `op_path`,
-`GLAB_TOKEN`, or `--token` instead. Configuration precedence is:
+For multiple GitLab servers, configure an instance list in the same file:
+
+```toml
+delay = "90s"
+op_command = "op.exe" # optional default for all instances
+
+[[instances]]
+name = "work"
+host = "https://gitlab.work.example"
+api_path = "/api/v4/"
+op_path = "op://Work/GitLab/API Token"
+
+[[instances]]
+name = "personal"
+host = "https://gitlab.personal.example"
+api_path = "/api/v4/"
+op_path = "op://Personal/GitLab/API Token"
+# op_command = "op" # optional per-instance override
+```
+
+Names must be unique. Each instance needs its own `op_path`; tokens are never
+read from TOML. Shared `delay`, `notify`, and `icon` settings apply to all
+instances. Single-instance host, API path, token, and 1Password flags/environment
+variables are ignored when `[[instances]]` is present; `GLAB_OP_COMMAND` or
+`--op-command` sets the default CLI for instances without an `op_command`.
+
+Instances are polled independently. The notification combines available counts;
+if one instance fails, its count is excluded and its name is shown as unavailable.
+Each failed instance retries with exponential backoff (up to 30 minutes) without
+stopping the others. If all fail, no TODO notification is sent. Counts include
+all GitLab API pages.
+
+In single-instance mode, use `op_path`, `GLAB_TOKEN`, or `--token` instead of
+storing a token in TOML. Configuration precedence is:
 
 ```text
 defaults < TOML file < environment variables < command-line flags
@@ -44,9 +76,9 @@ flags:
 - `GLAB_OP_COMMAND` - 1Password CLI command; defaults to `op.exe`
 - `GLAB_DELAY` - The interval between polling requests; defaults to `90s`
 
-If `GLAB_OP_PATH` is set, it takes precedence over `GLAB_TOKEN`. The application
-retries every five seconds until the 1Password CLI can read the secret, which
-allows it to start before 1Password is ready.
+If `GLAB_OP_PATH` is set, it takes precedence over `GLAB_TOKEN` in
+single-instance mode. An unavailable 1Password secret is retried with per-instance
+backoff; it does not prevent other instances from being checked.
 
 Optional settings:
 

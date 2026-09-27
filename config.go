@@ -11,13 +11,23 @@ import (
 // fileConfig contains settings that may be persisted in a TOML file. Tokens
 // are intentionally not supported here; use GLAB_TOKEN or 1Password instead.
 type fileConfig struct {
+	Instances []instanceConfig `toml:"instances"`
+	Host      string           `toml:"host"`
+	APIPath   string           `toml:"api_path"`
+	OPPath    string           `toml:"op_path"`
+	OPCommand string           `toml:"op_command"`
+	Delay     string           `toml:"delay"`
+	Notify    string           `toml:"notify"`
+	Icon      string           `toml:"icon"`
+}
+
+// instanceConfig describes one GitLab connection. Tokens are never stored in TOML.
+type instanceConfig struct {
+	Name      string `toml:"name"`
 	Host      string `toml:"host"`
 	APIPath   string `toml:"api_path"`
 	OPPath    string `toml:"op_path"`
 	OPCommand string `toml:"op_command"`
-	Delay     string `toml:"delay"`
-	Notify    string `toml:"notify"`
-	Icon      string `toml:"icon"`
 }
 
 func defaultConfigPath() (string, error) {

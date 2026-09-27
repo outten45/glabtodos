@@ -1,80 +1,97 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
-	simplejson "github.com/bitly/go-simplejson"
 	"github.com/gen2brain/beeep"
 	"github.com/justincampbell/anybar"
-	"github.com/namsral/flag"
 
 	"github.com/outtenr/glabtodos/secrets"
 )
 
-type argsContext struct {
-	Args    []string
-	Host    *string
-	Token   *string
-	OPPath  *string
-	OPCmd   *string
-	APIPath *string
-	Delay   *string
-	Notify  *string
-	Icon    *string
-	Config  *string
+type instance struct {
+	name, host, apiPath, opPath, opCommand, token string
+	count                                         int
+	known                                         bool
+	failed                                        bool
+	failures                                      int
+	nextAttempt                                   time.Time
 }
 
-func (ac *argsContext) todoURL() string {
-	return fmt.Sprintf("%s%stodos", *ac.Host, *ac.APIPath)
+type settings struct {
+	instances []*instance
+	delay     time.Duration
+	notify    string
+	icon      string
 }
 
-func (ac *argsContext) valid() bool {
-	valid := true
-	if *ac.Host == "" || *ac.APIPath == "" || (*ac.Token == "" && *ac.OPPath == "") {
-		valid = false
-	}
-	return valid
-}
-
-func parseArgs(args []string) *argsContext {
+func parseArgs(args []string) (settings, error) {
 	file, configPath, err := loadFileConfig(args)
 	if err != nil {
-		log.Fatal(err)
+		return settings{}, err
 	}
-	if file.OPCommand == "" {
-		file.OPCommand = "op.exe"
+	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	host := fs.String("host", envOr("GLAB_HOST", file.Host), "GitLab host (single-instance mode)")
+	apiPath := fs.String("apipath", envOr("GLAB_APIPATH", file.APIPath), "GitLab API path (single-instance mode)")
+	token := fs.String("token", envOr("GLAB_TOKEN", ""), "GitLab token (single-instance mode; not read from config file)")
+	opPath := fs.String("op-path", envOr("GLAB_OP_PATH", file.OPPath), "1Password token reference (single-instance mode)")
+	opCmd := fs.String("op-command", envOr("GLAB_OP_COMMAND", defaultString(file.OPCommand, "op.exe")), "1Password CLI command")
+	delay := fs.String("delay", envOr("GLAB_DELAY", defaultString(file.Delay, "90s")), "interval between polling attempts")
+	notify := fs.String("notify", envOr("GLAB_NOTIFY", file.Notify), "external notification command")
+	icon := fs.String("icon", envOr("GLAB_ICON", file.Icon), "notification icon")
+	fs.String("config", configPath, "TOML configuration file")
+	fs.Bool("no-config", false, "disable configuration file loading")
+	if err := fs.Parse(args[1:]); err != nil {
+		return settings{}, err
 	}
-	fs := flag.NewFlagSetWithEnvPrefix(args[0], "GLAB", flag.ExitOnError)
+	interval, err := time.ParseDuration(*delay)
+	if err != nil || interval <= 0 {
+		return settings{}, fmt.Errorf("delay must be a positive duration: %q", *delay)
+	}
+	cfg := settings{delay: interval, notify: *notify, icon: *icon}
+	if len(file.Instances) > 0 {
+		// Single-instance overrides are deliberately not applied to the list.
+		seen := make(map[string]bool)
+		for _, entry := range file.Instances {
+			if entry.Name == "" || seen[entry.Name] {
+				return settings{}, fmt.Errorf("instance names must be nonempty and unique: %q", entry.Name)
+			}
+			seen[entry.Name] = true
+			i := &instance{name: entry.Name, host: entry.Host, apiPath: entry.APIPath,
+				opPath: entry.OPPath, opCommand: defaultString(entry.OPCommand, *opCmd)}
+			if err := i.validate(); err != nil {
+				return settings{}, err
+			}
+			cfg.instances = append(cfg.instances, i)
+		}
+	} else {
+		i := &instance{name: "GitLab", host: *host, apiPath: *apiPath, opPath: *opPath,
+			opCommand: *opCmd, token: *token}
+		if err := i.validate(); err != nil {
+			return settings{}, err
+		}
+		cfg.instances = []*instance{i}
+	}
+	return cfg, nil
+}
 
-	ap := &argsContext{
-		Args:    args,
-		Host:    fs.String("host", file.Host, "name of the gitlab host"),
-		APIPath: fs.String("apipath", file.APIPath, "api path on the gitlab host"),
-		Token:   fs.String("token", "", "token for gitlab (not read from the config file)"),
-		OPPath:  fs.String("op-path", file.OPPath, "1Password secret reference for the GitLab token (for example, op://Personal/GitLab/API Token)"),
-		OPCmd:   fs.String("op-command", file.OPCommand, "1Password CLI command"),
-		Delay:   fs.String("delay", defaultString(file.Delay, "90s"), "Delay between polling gitlab. default: 90s"),
-		Notify:  fs.String("notify", file.Notify, "External script to call for notifications"),
-		Icon:    fs.String("icon", file.Icon, "Location of icon (optional)"),
-		Config:  fs.String("config", configPath, "Path to TOML configuration file"),
+func envOr(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
 	}
-	fs.Bool("no-config", false, "Disable configuration file loading")
-	fs.Parse(args)
-	// fmt.Printf("2ap: %+v|%+v\n", *ap.Delay, *ap.Host)
-	if !ap.valid() {
-		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		fs.PrintDefaults()
-		os.Exit(1)
-	}
-
-	return ap
+	return fallback
 }
 
 func defaultString(value, fallback string) string {
@@ -84,123 +101,175 @@ func defaultString(value, fallback string) string {
 	return value
 }
 
-// tokenFromArgs returns the configured token. When an 1Password path is set,
-// it keeps retrying until the 1Password CLI is available and authenticated.
-func tokenFromArgs(ac *argsContext) string {
-	if *ac.OPPath == "" {
-		return *ac.Token
+func (i *instance) validate() error {
+	if i.host == "" || i.apiPath == "" || (i.opPath == "" && i.token == "") {
+		return fmt.Errorf("instance %q requires host, api_path, and op_path or token", i.name)
 	}
-
-	for {
-		token, err := secrets.GitLabToken(*ac.OPCmd, *ac.OPPath)
-		if err == nil {
-			return token
-		}
-		log.Printf("Unable to read GitLab token from 1Password: %v; retrying in 5s", err)
-		time.Sleep(5 * time.Second)
+	u, err := url.Parse(i.host)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("instance %q has invalid host URL %q", i.name, i.host)
 	}
-}
-
-func sendNotifications(todos []interface{}, ext_command string) {
-	if len(todos) > 0 {
-		t := time.Now()
-		fmt.Printf("%s - TODO count found: %d\n", t.Format("2006-01-02 15:04:05"), len(todos))
-		anybar.Red()
-		txt := fmt.Sprintf("%d pending TODOs.", len(todos))
-		err := beeep.Alert("GitLab Todo", txt, notificationIcon)
-		if err != nil {
-			log.Print("Beeep notification error: ")
-			log.Println(err)
-		}
-		if ext_command != "" {
-			cmd := exec.Command(ext_command, txt)
-			err2 := cmd.Start()
-			if err2 != nil {
-				log.Fatal(err2)
-			}
-			err2 = cmd.Wait()
-			if err2 != nil {
-				log.Printf("External command finished with error: %v", err2)
-			}
-		}
-	} else {
-		t := time.Now()
-		fmt.Printf("%s - Nothing found.\n", t.Format("2006-01-02 15:04:05"))
-		anybar.White()
+	if !strings.HasPrefix(i.apiPath, "/") || !strings.HasSuffix(i.apiPath, "/") {
+		return fmt.Errorf("instance %q: api_path must start and end with /", i.name)
 	}
-}
-
-func checkTodos(ac *argsContext) error {
-
-	url := ac.todoURL()
-
-	client := &http.Client{}
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("PRIVATE-TOKEN", *ac.Token)
-
-	response, err := client.Do(req)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	defer response.Body.Close()
-	buf, err := io.ReadAll(response.Body)
-	if err != nil {
-		return fmt.Errorf("read GitLab response: %w", err)
-	}
-
-	j, err := simplejson.NewJson(buf)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	//fmt.Printf("%+v\n", j)
-	vals, err := j.Array()
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	sendNotifications(vals, *ac.Notify)
 	return nil
 }
 
-var notificationIcon string
+func (i *instance) todoURL() string {
+	return strings.TrimRight(i.host, "/") + i.apiPath + "todos"
+}
+
+// fetchTodos reads all pages; a failed page invalidates the entire count.
+func fetchTodos(client *http.Client, i *instance) (int, error) {
+	base := i.todoURL()
+	count := 0
+	for page := 1; ; {
+		u, err := url.Parse(base)
+		if err != nil {
+			return 0, err
+		}
+		query := u.Query()
+		query.Set("per_page", "100")
+		query.Set("page", strconv.Itoa(page))
+		u.RawQuery = query.Encode()
+		req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+		if err != nil {
+			return 0, err
+		}
+		req.Header.Set("PRIVATE-TOKEN", i.token)
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", i.name, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return 0, fmt.Errorf("%s: GitLab returned HTTP %d", i.name, resp.StatusCode)
+		}
+		var todos []json.RawMessage
+		err = json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(&todos)
+		resp.Body.Close()
+		if err != nil || todos == nil {
+			return 0, fmt.Errorf("%s: invalid TODO response: %v", i.name, err)
+		}
+		count += len(todos)
+		next := resp.Header.Get("X-Next-Page")
+		if next == "" {
+			return count, nil
+		}
+		nextPage, err := strconv.Atoi(next)
+		if err != nil || nextPage <= page {
+			return 0, fmt.Errorf("%s: invalid X-Next-Page %q", i.name, next)
+		}
+		page = nextPage
+	}
+}
+
+// retryDelay uses independent, bounded exponential backoff for each instance.
+func retryDelay(failures int, interval time.Duration) time.Duration {
+	backoff := time.Minute
+	for n := 1; n < failures && backoff < 30*time.Minute; n++ {
+		backoff *= 2
+	}
+	if backoff > 30*time.Minute {
+		backoff = 30 * time.Minute
+	}
+	if interval > backoff {
+		return interval
+	}
+	return backoff
+}
+
+// poll updates each instance independently; unavailable counts are excluded
+// from the total, including counts from earlier successful polls.
+func poll(cfg *settings, client *http.Client, now time.Time) (int, []string, bool) {
+	var wg sync.WaitGroup
+	for _, i := range cfg.instances {
+		if now.Before(i.nextAttempt) {
+			continue
+		}
+		wg.Add(1)
+		go func(i *instance) {
+			defer wg.Done()
+			var err error
+			if i.opPath != "" {
+				i.token, err = secrets.GitLabToken(i.opCommand, i.opPath)
+			}
+			var count int
+			if err == nil {
+				count, err = fetchTodos(client, i)
+			}
+			if err != nil {
+				i.failed = true
+				i.failures++
+				i.nextAttempt = now.Add(retryDelay(i.failures, cfg.delay))
+				log.Printf("%s: %v; retrying at %s", i.name, err, i.nextAttempt.Format(time.RFC3339))
+			} else {
+				i.count, i.known, i.failed, i.failures = count, true, false, 0
+				i.nextAttempt = now.Add(cfg.delay)
+			}
+		}(i)
+	}
+	wg.Wait()
+	total := 0
+	unavailable := []string{}
+	anySuccess := false
+	for _, i := range cfg.instances {
+		if i.failed || !i.known {
+			unavailable = append(unavailable, i.name)
+		} else {
+			total += i.count
+			anySuccess = true
+		}
+	}
+	return total, unavailable, anySuccess
+}
+
+func sendNotifications(total int, unavailable []string, anySuccess bool, cfg *settings) {
+	if !anySuccess {
+		log.Printf("No GitLab TODO counts available (%s)", strings.Join(unavailable, ", "))
+		anybar.White()
+		return
+	}
+	message := fmt.Sprintf("%d pending TODOs", total)
+	if len(unavailable) > 0 {
+		message += fmt.Sprintf(" (partial; unavailable: %s)", strings.Join(unavailable, ", "))
+	}
+	message += "."
+	log.Println(message)
+	if total == 0 {
+		anybar.White()
+	} else {
+		anybar.Red()
+	}
+	if total == 0 && len(unavailable) == 0 {
+		return
+	}
+	if err := beeep.Alert("GitLab Todo", message, cfg.icon); err != nil {
+		log.Printf("Beeep notification error: %v", err)
+	}
+	if cfg.notify != "" {
+		cmd := exec.Command(cfg.notify, message)
+		if err := cmd.Run(); err != nil {
+			log.Printf("External notification command error: %v", err)
+		}
+	}
+}
 
 func main() {
-	ac := parseArgs(os.Args)
-	anybar.White()
-	if ac.Icon != nil {
-		notificationIcon = *ac.Icon
+	cfg, err := parseArgs(os.Args)
+	if err != nil {
+		log.Fatal(err)
 	}
 	beeep.AppName = "GLabTodos"
-
-	// Resolve the token once at startup. This also lets the application start
-	// before 1Password has finished launching or signing in.
-	*ac.Token = tokenFromArgs(ac)
-
-	// fmt.Printf("%+v\n", ac)
-	var err error
-	var errorCount int64
-	t, err2 := time.ParseDuration(*ac.Delay)
-	// log.Printf("time: %+t\n", t)
-	if err2 != nil {
-		log.Fatalf("Error: %+v\n", err2)
+	anybar.White()
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		// Do not forward PRIVATE-TOKEN to a redirect destination.
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}
-
 	for {
-		err = checkTodos(ac)
-
-		if err != nil {
-			errorCount = errorCount + 1
-			backoff := math.Exp2(float64(errorCount)) - 1
-			fmt.Printf(">> There was a problem. Waiting %0.1f min to retry request.\n", backoff)
-			t = time.Duration(backoff) * time.Minute
-		} else {
-			errorCount = 0
-		}
-
-		time.Sleep(t)
+		total, unavailable, anySuccess := poll(&cfg, client, time.Now())
+		sendNotifications(total, unavailable, anySuccess, &cfg)
+		time.Sleep(cfg.delay)
 	}
-
 }
