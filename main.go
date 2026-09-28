@@ -179,6 +179,22 @@ func retryDelay(failures int, interval time.Duration) time.Duration {
 	return backoff
 }
 
+// loadTokens resolves 1Password references once at startup. Tokens remain cached
+// in each instance until the process exits.
+func loadTokens(cfg *settings) error {
+	for _, i := range cfg.instances {
+		if i.opPath == "" {
+			continue
+		}
+		token, err := secrets.GitLabToken(i.opCommand, i.opPath)
+		if err != nil {
+			return fmt.Errorf("%s: unable to load 1Password token: %w", i.name, err)
+		}
+		i.token = token
+	}
+	return nil
+}
+
 // poll updates each instance independently; unavailable counts are excluded
 // from the total, including counts from earlier successful polls.
 func poll(cfg *settings, client *http.Client, now time.Time) (int, []string, bool) {
@@ -190,14 +206,7 @@ func poll(cfg *settings, client *http.Client, now time.Time) (int, []string, boo
 		wg.Add(1)
 		go func(i *instance) {
 			defer wg.Done()
-			var err error
-			if i.opPath != "" {
-				i.token, err = secrets.GitLabToken(i.opCommand, i.opPath)
-			}
-			var count int
-			if err == nil {
-				count, err = fetchTodos(client, i)
-			}
+			count, err := fetchTodos(client, i)
 			if err != nil {
 				i.failed = true
 				i.failures++
@@ -258,6 +267,9 @@ func sendNotifications(total int, unavailable []string, anySuccess bool, cfg *se
 func main() {
 	cfg, err := parseArgs(os.Args)
 	if err != nil {
+		log.Fatal(err)
+	}
+	if err := loadTokens(&cfg); err != nil {
 		log.Fatal(err)
 	}
 	beeep.AppName = "GLabTodos"
