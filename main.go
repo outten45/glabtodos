@@ -239,12 +239,17 @@ func sendNotifications(total int, unavailable []string, anySuccess bool, cfg *se
 		anybar.White()
 		return
 	}
-	message := fmt.Sprintf("%d pending TODOs", total)
-	if len(unavailable) > 0 {
-		message += fmt.Sprintf(" (partial; unavailable: %s)", strings.Join(unavailable, ", "))
+	title := fmt.Sprintf("%d pending TODOs", total)
+	var lines []string
+	for _, i := range cfg.instances {
+		if i.failed || !i.known {
+			lines = append(lines, fmt.Sprintf("%s: unavailable", i.name))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s: %d", i.name, i.count))
+		}
 	}
-	message += "."
-	log.Println(message)
+	message := strings.Join(lines, "\n")
+	log.Printf("%s: %s", title, strings.ReplaceAll(message, "\n", "; "))
 	if total == 0 {
 		anybar.White()
 	} else {
@@ -253,7 +258,7 @@ func sendNotifications(total int, unavailable []string, anySuccess bool, cfg *se
 	if total == 0 && len(unavailable) == 0 {
 		return
 	}
-	if err := beeep.Alert("GitLab Todo", message, cfg.icon); err != nil {
+	if err := beeep.Alert(title, message, cfg.icon); err != nil {
 		log.Printf("Beeep notification error: %v", err)
 	}
 	if cfg.notify != "" {
