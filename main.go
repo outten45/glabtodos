@@ -166,12 +166,13 @@ func fetchTodos(client *http.Client, i *instance) (int, error) {
 
 // retryDelay uses independent, bounded exponential backoff for each instance.
 func retryDelay(failures int, interval time.Duration) time.Duration {
+	const maxBackoff = 3 * time.Minute
 	backoff := time.Minute
-	for n := 1; n < failures && backoff < 30*time.Minute; n++ {
+	for n := 1; n < failures && backoff < maxBackoff; n++ {
 		backoff *= 2
 	}
-	if backoff > 30*time.Minute {
-		backoff = 30 * time.Minute
+	if backoff > maxBackoff {
+		backoff = maxBackoff
 	}
 	if interval > backoff {
 		return interval

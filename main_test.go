@@ -102,7 +102,7 @@ func TestPollIndependentInstancesAndPagination(t *testing.T) {
 }
 
 func TestRetryDelay(t *testing.T) {
-	if retryDelay(1, 90*time.Second) != 90*time.Second || retryDelay(2, time.Second) != 2*time.Minute || retryDelay(100, time.Second) != 30*time.Minute {
+	if retryDelay(1, 90*time.Second) != 90*time.Second || retryDelay(2, time.Second) != 2*time.Minute || retryDelay(3, time.Second) != 3*time.Minute || retryDelay(100, time.Second) != 3*time.Minute {
 		t.Fatal("unexpected backoff")
 	}
 }
