@@ -19,6 +19,7 @@ name = "one"
 host = "https://one.example"
 api_path = "/api/v4/"
 op_path = "op://one/token"
+alert_on_unavailable = false
 [[instances]]
 name = "two"
 host = "https://two.example"
@@ -32,7 +33,7 @@ op_path = "op://two/token"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.instances) != 2 || cfg.instances[0].name != "one" || cfg.instances[1].opPath != "op://two/token" || cfg.delay != 2*time.Minute {
+	if len(cfg.instances) != 2 || cfg.instances[0].name != "one" || cfg.instances[1].opPath != "op://two/token" || cfg.delay != 2*time.Minute || cfg.instances[0].alertOnUnavailable || !cfg.instances[1].alertOnUnavailable {
 		t.Fatalf("unexpected settings: %+v", cfg)
 	}
 }

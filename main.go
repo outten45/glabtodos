@@ -23,6 +23,7 @@ import (
 
 type instance struct {
 	name, host, apiPath, opPath, opCommand, token string
+	alertOnUnavailable                            bool
 	count                                         int
 	known                                         bool
 	failed                                        bool
@@ -69,8 +70,13 @@ func parseArgs(args []string) (settings, error) {
 				return settings{}, fmt.Errorf("instance names must be nonempty and unique: %q", entry.Name)
 			}
 			seen[entry.Name] = true
+			alertOnUnavailable := true
+			if entry.AlertOnUnavailable != nil {
+				alertOnUnavailable = *entry.AlertOnUnavailable
+			}
 			i := &instance{name: entry.Name, host: entry.Host, apiPath: entry.APIPath,
-				opPath: entry.OPPath, opCommand: defaultString(entry.OPCommand, *opCmd)}
+				opPath: entry.OPPath, opCommand: defaultString(entry.OPCommand, *opCmd),
+				alertOnUnavailable: alertOnUnavailable}
 			if err := i.validate(); err != nil {
 				return settings{}, err
 			}
@@ -78,7 +84,7 @@ func parseArgs(args []string) (settings, error) {
 		}
 	} else {
 		i := &instance{name: "GitLab", host: *host, apiPath: *apiPath, opPath: *opPath,
-			opCommand: *opCmd, token: *token}
+			opCommand: *opCmd, token: *token, alertOnUnavailable: true}
 		if err := i.validate(); err != nil {
 			return settings{}, err
 		}
@@ -235,6 +241,11 @@ func poll(cfg *settings, client *http.Client, now time.Time) (int, []string, boo
 }
 
 func sendNotifications(total int, unavailable []string, anySuccess bool, cfg *settings) {
+	for _, i := range cfg.instances {
+		if (i.failed || !i.known) && !i.alertOnUnavailable {
+			return
+		}
+	}
 	if !anySuccess {
 		log.Printf("No GitLab TODO counts available (%s)", strings.Join(unavailable, ", "))
 		anybar.White()

@@ -45,6 +45,7 @@ host = "https://gitlab.personal.example"
 api_path = "/api/v4/"
 op_path = "op://Personal/GitLab/API Token"
 # op_command = "op" # optional per-instance override
+# alert_on_unavailable = false # suppress notifications when this instance is unavailable
 ```
 
 Names must be unique. Each instance needs its own `op_path`; tokens are never
@@ -55,9 +56,11 @@ variables are ignored when `[[instances]]` is present; `GLAB_OP_COMMAND` or
 
 Instances are polled independently. The notification combines available counts;
 if one instance fails, its count is excluded and its name is shown as unavailable.
-Each failed instance retries with exponential backoff (up to 30 minutes) without
-stopping the others. If all fail, no TODO notification is sent. Counts include
-all GitLab API pages.
+Each failed instance retries with exponential backoff (up to 3 minutes) without
+stopping the others. If all fail, no TODO notification is sent. Set
+`alert_on_unavailable = false` on an instance to suppress the notification whenever
+that instance is unavailable; this setting defaults to `true`. Counts include all
+GitLab API pages.
 
 In single-instance mode, use `op_path`, `GLAB_TOKEN`, or `--token` instead of
 storing a token in TOML. Configuration precedence is:

@@ -23,11 +23,12 @@ type fileConfig struct {
 
 // instanceConfig describes one GitLab connection. Tokens are never stored in TOML.
 type instanceConfig struct {
-	Name      string `toml:"name"`
-	Host      string `toml:"host"`
-	APIPath   string `toml:"api_path"`
-	OPPath    string `toml:"op_path"`
-	OPCommand string `toml:"op_command"`
+	Name               string `toml:"name"`
+	Host               string `toml:"host"`
+	APIPath            string `toml:"api_path"`
+	OPPath             string `toml:"op_path"`
+	OPCommand          string `toml:"op_command"`
+	AlertOnUnavailable *bool  `toml:"alert_on_unavailable"`
 }
 
 func defaultConfigPath() (string, error) {
